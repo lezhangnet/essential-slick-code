@@ -7,6 +7,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 object Example extends App {
 
+  println("zhale:ch01 Example running")
+
   // Case class representing a row in our table:
   final case class Message(
     sender:  String,
@@ -58,4 +60,18 @@ object Example extends App {
 
   println("\nSelecting only messages from HAL:")
   exec( halSays.result ) foreach { println }
+
+  println("----- for comprehension")
+  val halSays2 = for {
+    message <- messages if message.sender === "HAL"
+  } yield message
+  exec( halSays2.result ) foreach { println }
+
+  println("----- exe 1")
+  val msg = Message("Dave", "What if I say 'Pretty please'?")
+  exec(messages += msg)
+
+  println("----- exe 2")
+  val query = messages.filter(m => m.sender === "Dave").result
+  exec(query).foreach(println)
 }
