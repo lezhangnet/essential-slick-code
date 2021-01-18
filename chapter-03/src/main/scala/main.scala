@@ -1,7 +1,10 @@
+import Example.printCurrentDatabaseState
+
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import slick.jdbc.H2Profile.api._
+
 import scala.util.Try
 
 object Example extends App {
@@ -36,13 +39,11 @@ object Example extends App {
 
   def populate: DBIOAction[Option[Int], NoStream,Effect.All] =  {
     for {    
-    //Drop table if it already exists, then create the table:
-    _     <- messages.schema.drop.asTry andThen messages.schema.create
-    // Add some data:
-    count <- messages ++= testData
-  } yield count
-    
-    
+      //Drop table if it already exists, then create the table:
+      _     <- messages.schema.drop.asTry andThen messages.schema.create
+      // Add some data:
+      count <- messages ++= testData
+    } yield count
   }
 
   // Utility to print out what is in the database:
@@ -52,6 +53,8 @@ object Example extends App {
   }
 
   try {
+    println("zhale:ch03 Example running")
+
     exec(populate)
 
     // -- INSERTS --
@@ -59,6 +62,29 @@ object Example extends App {
     // Insert one, returning the ID:
     val id = exec((messages returning messages.map(_.id)) += Message("HAL", "I'm back"))
     println(s"The ID inserted was: $id")
+
+    // force insert with custom id
+    val forceInsertAction = messages forceInsert Message(
+      "HAL",
+      "I'm a computer, what would I do with a Christmas card anyway?",
+      1000L)
+    exec(forceInsertAction)
+    println("after normal insert and force insert:")
+    printCurrentDatabaseState()
+
+    // returning whole row on insert
+    // exec(messages returning messages += Message("Dave", "So... what do we do now?")) // NOT working for H2
+    val messagesReturningRow = messages returning messages.map(_.id) into { (message, id) =>
+      message.copy(id = id)
+    }
+    val insertMessage: DBIO[Message] = messagesReturningRow += Message("Dave", "You're such a jerk.")
+    val row = exec(insertMessage)
+    println("The whole row inserted was:" + row)
+
+    // insert some fields only
+    // exec(messages.map(_.sender) += "HAL") // runtime error: content not nullable
+    exec(messages.map(r => (r.sender, r.content)) += ("HAL", "test")) // runtime error: content not nullable
+    printCurrentDatabaseState()
 
     // -- DELETES --
 
@@ -74,8 +100,10 @@ object Example extends App {
 
     // -- UPDATES --
 
+    println("-- UPDATES --")
     // Update HAL's name:
     val rows = exec(messages.filter(_.sender === "HAL").map(_.sender).update("HAL 9000"))
+    println("rows updated: " + rows)
 
     // Update HAL's name and message:
     val query =
@@ -84,23 +112,16 @@ object Example extends App {
         map(message => (message.sender, message.content))
 
     val rowsAffected  = exec(query.update(("HAL 9000", "Sure, Dave. Come right in.")))
+    println("rows updated: " + rowsAffected) // 0 - no id 4 at this point
 
-    // Action for updating multiple fields:
-    exec {
-      messages.
-        filter(_.id === 4L).
-        map(message => (message.sender, message.content)).
-        update(("HAL 9000", "Sure, Dave. Come right in."))
-      }
-
-    // Using a clase class to update:
+    // Using a case class to update:
     case class NameText(name: String, text: String)
     val newValue = NameText("Dave", "Now I totally don't trust you.")
 
     exec {
-      messages.filter(_.id === 7L).map( m => (m.sender, m.content).mapTo[NameText]).update(newValue)
+      messages.filter(_.id === 1001L).map( m => (m.sender, m.content).mapTo[NameText]).update(newValue)
     }
-    // printCurrentDatabaseState()
+    printCurrentDatabaseState()
 
     // Client-side update:
     def exclaim(msg: Message): Message = msg.copy(content = msg.content + "!")
@@ -109,7 +130,8 @@ object Example extends App {
     def modify(msg: Message): DBIO[Int] = messages.filter(_.id === msg.id).update(exclaim(msg))
     val action: DBIO[Seq[Int]] = all.flatMap( msgs => DBIO.sequence(msgs.map(modify)) )
     val rowCounts: Seq[Int] = exec(action)
-
+    println("client-side update count:" + rowCounts) // List(1, 1, 1, 1, 1)
+    printCurrentDatabaseState()
   } finally db.close
 
 }

@@ -56,6 +56,7 @@ object Example extends App {
     println("\nInserting test data")
     exec(messages ++= freshTestData)
 
+    println("----- query -----")
     // Run the test query and print the results:
     println("\nSelecting all message sender names:")
     exec( messages.map(_.sender).result ) foreach { println }
@@ -77,6 +78,13 @@ object Example extends App {
     println("\nfilterOpt, example SQL:")
     println(" With a value: "+query(Some("Dave")).result.statements.mkString)
     println(" Without a value: "+query(None).result.statements.mkString)
+
+    println("\n----- take -----")
+    val queryWithTake = messages.sortBy(_.sender).take(2).result
+    println(exec(queryWithTake)) // Vector(Message(Dave,Hello, HAL. Do you read me, HAL?,1), Message(Dave,What if I say 'Pretty please'?,5))
+
+    val queryWithTakeButNoResult = messages.filter(_.sender === "nobody").take(2).result
+    println(exec(queryWithTakeButNoResult)) // Vector()
 
   } finally db.close
 }
